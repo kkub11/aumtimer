@@ -1,48 +1,50 @@
-import { Audio } from 'expo-av';
+import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
 
-let recording = null;
+// expo-audio uses a hook-based API, so we manage the recorder reference externally.
+// This module exports setup/teardown helpers that work with a recorder ref
+// created in the component via useAudioRecorder.
 
-export async function startRecording(onMeteringUpdate) {
-  const { granted } = await Audio.requestPermissionsAsync();
+let _intervalId = null;
+let _recorder = null;
+
+export async function startRecording(recorder, onMeteringUpdate) {
+  _recorder = recorder;
+
+  const { granted } = await AudioModule.requestRecordingPermissionsAsync();
   if (!granted) {
     throw new Error('Microphone permission not granted');
   }
 
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: true, // keeps mic alive when screen locks
-  });
-
-  recording = new Audio.Recording();
-
-  await recording.prepareToRecordAsync({
-    ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  await recorder.prepareToRecordAsync({
+    ...RecordingPresets.HIGH_QUALITY,
     isMeteringEnabled: true,
   });
 
-  recording.setOnRecordingStatusUpdate((status) => {
-    if (status.isRecording && status.metering !== undefined) {
+  await recorder.record();
+
+  // Poll metering manually since expo-audio doesn't have setOnRecordingStatusUpdate
+  _intervalId = setInterval(() => {
+    if (recorder.isRecording) {
+      const metering = recorder.currentMetering ?? -160;
       onMeteringUpdate({
         timestamp: Date.now(),
-        metering: status.metering,
+        metering,
       });
     }
-  });
-
-  recording.setProgressUpdateInterval(100); // poll every 100ms
-
-  await recording.startAsync();
-  return recording;
+  }, 100);
 }
 
 export async function stopRecording() {
-  if (recording) {
+  if (_intervalId) {
+    clearInterval(_intervalId);
+    _intervalId = null;
+  }
+  if (_recorder) {
     try {
-      await recording.stopAndUnloadAsync();
+      await _recorder.stop();
     } catch (e) {
       // already stopped, ignore
     }
-    recording = null;
+    _recorder = null;
   }
 }

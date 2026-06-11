@@ -1,22 +1,26 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useAudioRecorder } from 'expo-audio';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { createAumDetector } from '../audio/AumDetector';
 import { createBeepDetector } from '../audio/BeepDetector';
 import { formatMs } from '../utils/formatTime';
 
 // Set to true during development to log raw metering values to console
-// Use this to calibrate your thresholds before your first real session
-const DEBUG_METERING = true;
+// Chant AUM and watch the numbers — use them to tune thresholds in
+// AumDetector.js and BeepDetector.js
+const DEBUG_METERING = false;
 
 export default function SessionScreen({ navigation }) {
   const [elapsedDisplay, setElapsedDisplay] = useState('0:00.0');
   const [aumCount, setAumCount] = useState(0);
   const [statusText, setStatusText] = useState('Listening...');
 
+  const recorder = useAudioRecorder();
+
   const startTimeRef = useRef(Date.now());
   const chantStartTimeRef = useRef(null);
-  const aumCountRef = useRef(0); // ref copy so detectors always see current value
+  const aumCountRef = useRef(0);
   const intervalRef = useRef(null);
   const sessionDoneRef = useRef(false);
 
@@ -25,7 +29,6 @@ export default function SessionScreen({ navigation }) {
     let beepDetector;
 
     async function init() {
-      // Build detectors
       aumDetector = createAumDetector({
         onAumOnset: (timestamp) => {
           if (chantStartTimeRef.current === null) {
@@ -48,9 +51,8 @@ export default function SessionScreen({ navigation }) {
         getIsInsideAum: () => aumDetector.isInsideAum(),
       });
 
-      // Start mic
       try {
-        await startRecording(({ timestamp, metering }) => {
+        await startRecording(recorder, ({ timestamp, metering }) => {
           if (DEBUG_METERING) {
             console.log(`[metering] ${metering.toFixed(1)} dBFS`);
           }
@@ -62,7 +64,7 @@ export default function SessionScreen({ navigation }) {
         console.error(e);
       }
 
-      // Start display timer
+      // Display timer
       intervalRef.current = setInterval(() => {
         setElapsedDisplay(formatMs(Date.now() - startTimeRef.current));
       }, 100);
@@ -71,7 +73,6 @@ export default function SessionScreen({ navigation }) {
     init();
 
     return () => {
-      // Cleanup on unmount
       clearInterval(intervalRef.current);
       stopRecording();
     };
