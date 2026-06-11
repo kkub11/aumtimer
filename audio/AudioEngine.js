@@ -1,4 +1,5 @@
-import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
+//import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
+import { useAudioRecorder, AudioModule } from 'expo-audio';
 
 // expo-audio uses a hook-based API, so we manage the recorder reference externally.
 // This module exports setup/teardown helpers that work with a recorder ref
@@ -16,7 +17,10 @@ export async function startRecording(recorder, onMeteringUpdate) {
   }
 
   await recorder.prepareToRecordAsync({
-    ...RecordingPresets.HIGH_QUALITY,
+    extension: '.m4a',
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
     isMeteringEnabled: true,
   });
 
