@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { VolumeManager } from 'react-native-volume-manager';
 
 export default function StartScreen({ navigation }) {
+  useEffect(() => {
+    async function ensureDndAccess() {
+      const granted = await VolumeManager.checkDndAccess();
+      if (!granted) {
+        await VolumeManager.requestDndAccess();
+      }
+    }
+    ensureDndAccess();
+  }, []);
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>AUM Timer</Text>

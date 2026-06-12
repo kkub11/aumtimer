@@ -4,6 +4,7 @@ import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-
 import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { createAumDetector } from '../audio/AumDetector';
 import { formatMs } from '../utils/formatTime';
+import { muteAll, restoreAll } from '../utils/volumeControl';
 
 // Set to true during development to log raw metering values to console
 // Chant AUM and watch the numbers — use them to tune thresholds in
@@ -40,6 +41,7 @@ export default function SessionScreen({ navigation }) {
     });
 
     async function init() {
+      await muteAll();
       try {
         await startRecording(recorder);
       } catch (e) {
@@ -57,6 +59,7 @@ export default function SessionScreen({ navigation }) {
     return () => {
       clearInterval(intervalRef.current);
       stopRecording();
+      restoreAll();
     };
   }, []);
 
@@ -78,6 +81,7 @@ export default function SessionScreen({ navigation }) {
     sessionDoneRef.current = true;
     clearInterval(intervalRef.current);
     stopRecording();
+    restoreAll();
 
     navigation.replace('Results', {
       startTime: startTimeRef.current,
