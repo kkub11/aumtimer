@@ -3,10 +3,10 @@
 // In debug mode, watch the console: chant AUM and note where metering peaks,
 // then sit silent and note the floor. Set thresholds between those values.
 
-const AUM_THRESHOLD = -30;      // dBFS — metering must exceed this to start a candidate
+const AUM_THRESHOLD = -35;      // dBFS — metering must exceed this to start a candidate
 const AUM_MIN_DURATION = 1500;  // ms  — must stay above threshold this long to confirm AUM
-const AUM_END_THRESHOLD = -40;  // dBFS — below this counts as silence
-const AUM_END_SILENCE = 400;    // ms  — silence needed to close out one AUM
+const AUM_END_THRESHOLD = -45;  // dBFS — below this counts as silence
+const AUM_END_SILENCE = 300;    // ms  — silence needed to close out one AUM
 
 // ───────────────────────────────────────────────────────────────────────────
 
