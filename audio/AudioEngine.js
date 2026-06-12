@@ -1,4 +1,4 @@
-import { AudioModule } from 'expo-audio';
+import { AudioModule, setAudioModeAsync } from 'expo-audio';
 
 // expo-audio uses a hook-based API. The recorder is created in the component
 // via useAudioRecorder; metering is read via useAudioRecorderState. This module
@@ -13,6 +13,12 @@ export async function startRecording(recorder) {
   if (!granted) {
     throw new Error('Microphone permission not granted');
   }
+
+  await setAudioModeAsync({
+    allowsRecording: true,
+    allowsBackgroundRecording: true,
+    playsInSilentMode: true,
+  });
 
   await recorder.prepareToRecordAsync();
   await recorder.record();
