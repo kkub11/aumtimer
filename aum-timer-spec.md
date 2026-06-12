@@ -301,3 +301,26 @@ Development order matters — the spec lays out a sequence that keeps you testin
 
 First thing to do before a real session: open SessionScreen.js and temporarily set DEBUG_METERING = true at the top. Then run a test — chant a few AUMs and trigger your beep sound. Watch the console in the terminal and note what numbers you see. Then open AumDetector.js and BeepDetector.js and tune the threshold constants at the top of each file to match your room. Set it back to false when done.
 That calibration step is the difference between it working first try and spending an hour wondering why it's not detecting anything.
+
+### Compiling (easy way)
+Option A: EAS Build (easiest, no Android Studio needed)
+Expo's cloud build service compiles the APK for you:
+
+npm install -g eas-cli
+eas login
+eas build:configure
+
+Then build a preview APK (installable directly, no Play Store):
+
+eas build -p android --profile preview
+
+It uploads your code to Expo's servers, builds it, and gives you a download link. Takes about 5-10 minutes. Download the APK on your phone and install it. You'll need a free Expo account at expo.dev if you don't have one.
+
+Build failed. To diagnose: npx expo config --json
+
+### Adding volume manager to mute all sounds during yoga
+Want me to proceed with react-native-volume-manager? You'd need to run:
+
+npx expo install react-native-volume-manager
+
+And then rebuild the app (not just reload in Expo Go) since it's a native module. I'd create a utils/volumeControl.js wrapper that saves all stream volumes on mute and restores them on unmute, and wire it into SessionScreen on start/stop/unmount.
