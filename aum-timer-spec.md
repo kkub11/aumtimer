@@ -292,3 +292,12 @@ Install navigation:
 ```bash
 npx expo install @react-navigation/native @react-navigation/native-stack react-native-screens react-native-safe-area-context
 ```
+
+## Instructions from Claude
+A few things worth highlighting before you hand this to Claude Code:
+The most important first step is calibration — before writing any detection logic, just run the AudioEngine and log raw metering values to the console while you chant and while it's silent. That 15-minute exercise will tell you exactly where to set your thresholds and will save you a lot of guesswork later.
+The background recording edge case is critical for a meditation app — make sure staysActiveInBackground: true gets set in the audio mode config or the session will die the moment your screen locks.
+Development order matters — the spec lays out a sequence that keeps you testing on real hardware from step 2 onward. Don't build all the UI first; get the mic working and calibrated before touching screens.
+
+First thing to do before a real session: open SessionScreen.js and temporarily set DEBUG_METERING = true at the top. Then run a test — chant a few AUMs and trigger your beep sound. Watch the console in the terminal and note what numbers you see. Then open AumDetector.js and BeepDetector.js and tune the threshold constants at the top of each file to match your room. Set it back to false when done.
+That calibration step is the difference between it working first try and spending an hour wondering why it's not detecting anything.

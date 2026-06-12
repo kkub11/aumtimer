@@ -1,14 +1,12 @@
-//import { useAudioRecorder, AudioModule, RecordingPresets } from 'expo-audio';
-import { useAudioRecorder, AudioModule } from 'expo-audio';
+import { AudioModule } from 'expo-audio';
 
-// expo-audio uses a hook-based API, so we manage the recorder reference externally.
-// This module exports setup/teardown helpers that work with a recorder ref
-// created in the component via useAudioRecorder.
+// expo-audio uses a hook-based API. The recorder is created in the component
+// via useAudioRecorder; metering is read via useAudioRecorderState. This module
+// only handles permissions and start/stop.
 
-let _intervalId = null;
 let _recorder = null;
 
-export async function startRecording(recorder, onMeteringUpdate) {
+export async function startRecording(recorder) {
   _recorder = recorder;
 
   const { granted } = await AudioModule.requestRecordingPermissionsAsync();
@@ -16,38 +14,16 @@ export async function startRecording(recorder, onMeteringUpdate) {
     throw new Error('Microphone permission not granted');
   }
 
-  await recorder.prepareToRecordAsync({
-    extension: '.m4a',
-    sampleRate: 44100,
-    numberOfChannels: 1,
-    bitRate: 128000,
-    isMeteringEnabled: true,
-  });
-
+  await recorder.prepareToRecordAsync();
   await recorder.record();
-
-  // Poll metering manually since expo-audio doesn't have setOnRecordingStatusUpdate
-  _intervalId = setInterval(() => {
-    if (recorder.isRecording) {
-      const metering = recorder.currentMetering ?? -160;
-      onMeteringUpdate({
-        timestamp: Date.now(),
-        metering,
-      });
-    }
-  }, 100);
 }
 
 export async function stopRecording() {
-  if (_intervalId) {
-    clearInterval(_intervalId);
-    _intervalId = null;
-  }
   if (_recorder) {
     try {
       await _recorder.stop();
     } catch (e) {
-      // already stopped, ignore
+      // already stopped
     }
     _recorder = null;
   }

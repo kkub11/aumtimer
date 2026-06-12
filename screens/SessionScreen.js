@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useAudioRecorder } from 'expo-audio';
+import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { createAumDetector } from '../audio/AumDetector';
 import { createBeepDetector } from '../audio/BeepDetector';
@@ -9,62 +9,55 @@ import { formatMs } from '../utils/formatTime';
 // Set to true during development to log raw metering values to console
 // Chant AUM and watch the numbers — use them to tune thresholds in
 // AumDetector.js and BeepDetector.js
-const DEBUG_METERING = false;
+const DEBUG_METERING = true;
 
 export default function SessionScreen({ navigation }) {
   const [elapsedDisplay, setElapsedDisplay] = useState('0:00.0');
   const [aumCount, setAumCount] = useState(0);
   const [statusText, setStatusText] = useState('Listening...');
 
-  const recorder = useAudioRecorder();
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  const recorderState = useAudioRecorderState(recorder, 100);
 
   const startTimeRef = useRef(Date.now());
   const chantStartTimeRef = useRef(null);
   const aumCountRef = useRef(0);
   const intervalRef = useRef(null);
   const sessionDoneRef = useRef(false);
+  const aumDetectorRef = useRef(null);
+  const beepDetectorRef = useRef(null);
 
   useEffect(() => {
-    let aumDetector;
-    let beepDetector;
+    aumDetectorRef.current = createAumDetector({
+      onAumOnset: (timestamp) => {
+        if (chantStartTimeRef.current === null) {
+          chantStartTimeRef.current = timestamp;
+          setStatusText('Chanting detected');
+        }
+      },
+      onAumComplete: () => {
+        aumCountRef.current += 1;
+        setAumCount(aumCountRef.current);
+      },
+    });
+
+    beepDetectorRef.current = createBeepDetector({
+      onBeepDetected: (timestamp) => {
+        if (sessionDoneRef.current) return;
+        sessionDoneRef.current = true;
+        handleSessionEnd(timestamp);
+      },
+      getIsInsideAum: () => aumDetectorRef.current.isInsideAum(),
+    });
 
     async function init() {
-      aumDetector = createAumDetector({
-        onAumOnset: (timestamp) => {
-          if (chantStartTimeRef.current === null) {
-            chantStartTimeRef.current = timestamp;
-            setStatusText('Chanting detected');
-          }
-        },
-        onAumComplete: () => {
-          aumCountRef.current += 1;
-          setAumCount(aumCountRef.current);
-        },
-      });
-
-      beepDetector = createBeepDetector({
-        onBeepDetected: (timestamp) => {
-          if (sessionDoneRef.current) return;
-          sessionDoneRef.current = true;
-          handleSessionEnd(timestamp);
-        },
-        getIsInsideAum: () => aumDetector.isInsideAum(),
-      });
-
       try {
-        await startRecording(recorder, ({ timestamp, metering }) => {
-          if (DEBUG_METERING) {
-            console.log(`[metering] ${metering.toFixed(1)} dBFS`);
-          }
-          aumDetector.feed({ timestamp, metering });
-          beepDetector.feed({ timestamp, metering });
-        });
+        await startRecording(recorder);
       } catch (e) {
         setStatusText('Microphone error — check permissions');
         console.error(e);
       }
 
-      // Display timer
       intervalRef.current = setInterval(() => {
         setElapsedDisplay(formatMs(Date.now() - startTimeRef.current));
       }, 100);
@@ -77,6 +70,20 @@ export default function SessionScreen({ navigation }) {
       stopRecording();
     };
   }, []);
+
+  // Feed metering to detectors whenever recorderState updates
+  useEffect(() => {
+    if (!recorderState.isRecording || sessionDoneRef.current) return;
+    const metering = recorderState.metering ?? -160;
+    const timestamp = Date.now();
+
+    if (DEBUG_METERING) {
+      console.log(`[metering] ${metering.toFixed(1)} dBFS`);
+    }
+
+    aumDetectorRef.current?.feed({ timestamp, metering });
+    beepDetectorRef.current?.feed({ timestamp, metering });
+  }, [recorderState]);
 
   function handleSessionEnd(endTimestamp) {
     clearInterval(intervalRef.current);
