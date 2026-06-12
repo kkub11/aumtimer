@@ -1,9 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { createAumDetector } from '../audio/AumDetector';
-import { createBeepDetector } from '../audio/BeepDetector';
 import { formatMs } from '../utils/formatTime';
 
 // Set to true during development to log raw metering values to console
@@ -25,7 +24,6 @@ export default function SessionScreen({ navigation }) {
   const intervalRef = useRef(null);
   const sessionDoneRef = useRef(false);
   const aumDetectorRef = useRef(null);
-  const beepDetectorRef = useRef(null);
 
   useEffect(() => {
     aumDetectorRef.current = createAumDetector({
@@ -39,15 +37,6 @@ export default function SessionScreen({ navigation }) {
         aumCountRef.current += 1;
         setAumCount(aumCountRef.current);
       },
-    });
-
-    beepDetectorRef.current = createBeepDetector({
-      onBeepDetected: (timestamp) => {
-        if (sessionDoneRef.current) return;
-        sessionDoneRef.current = true;
-        handleSessionEnd(timestamp);
-      },
-      getIsInsideAum: () => aumDetectorRef.current.isInsideAum(),
     });
 
     async function init() {
@@ -82,10 +71,11 @@ export default function SessionScreen({ navigation }) {
     }
 
     aumDetectorRef.current?.feed({ timestamp, metering });
-    beepDetectorRef.current?.feed({ timestamp, metering });
   }, [recorderState]);
 
   function handleSessionEnd(endTimestamp) {
+    if (sessionDoneRef.current) return;
+    sessionDoneRef.current = true;
     clearInterval(intervalRef.current);
     stopRecording();
 
@@ -112,7 +102,9 @@ export default function SessionScreen({ navigation }) {
       <Text style={styles.statusLabel}>AUMS</Text>
       <Text style={styles.aumCount}>{aumCount}</Text>
 
-      <Text style={styles.hint}>Session ends on beep</Text>
+      <TouchableOpacity style={styles.stopButton} onPress={() => handleSessionEnd(Date.now())}>
+        <Text style={styles.stopButtonText}>STOP</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -161,10 +153,18 @@ const styles = StyleSheet.create({
     color: '#c9a84c',
     fontVariant: ['tabular-nums'],
   },
-  hint: {
+  stopButton: {
     position: 'absolute',
     bottom: 40,
-    fontSize: 12,
-    color: '#333350',
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: '#444460',
+  },
+  stopButtonText: {
+    fontSize: 13,
+    color: '#8888aa',
+    letterSpacing: 4,
   },
 });
