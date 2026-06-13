@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import StartScreen from './screens/StartScreen';
 import SessionScreen from './screens/SessionScreen';
 import ResultsScreen from './screens/ResultsScreen';
+import SettingsScreen from './screens/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,7 @@ export default function App() {
         <Stack.Screen name="Start" component={StartScreen} />
         <Stack.Screen name="Session" component={SessionScreen} />
         <Stack.Screen name="Results" component={ResultsScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

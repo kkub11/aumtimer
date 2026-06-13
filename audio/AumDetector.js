@@ -10,7 +10,12 @@ const AUM_END_SILENCE = 300;    // ms  — silence needed to close out one AUM
 
 // ───────────────────────────────────────────────────────────────────────────
 
-export function createAumDetector({ onAumOnset, onAumComplete }) {
+export function createAumDetector({ onAumOnset, onAumComplete }, config = {}) {
+  const threshold    = config.aumThreshold    ?? AUM_THRESHOLD;
+  const minDuration  = config.aumMinDuration  ?? AUM_MIN_DURATION;
+  const endThreshold = config.aumEndThreshold ?? AUM_END_THRESHOLD;
+  const endSilence   = config.aumEndSilence   ?? AUM_END_SILENCE;
+
   let state = 'silent'; // 'silent' | 'candidate' | 'confirmed' | 'ending'
   let candidateStart = null;
   let silenceStart = null;
@@ -19,47 +24,41 @@ export function createAumDetector({ onAumOnset, onAumComplete }) {
   function feed({ timestamp, metering }) {
     switch (state) {
       case 'silent':
-        if (metering >= AUM_THRESHOLD) {
-          // Sound started — begin candidate window
+        if (metering >= threshold) {
           state = 'candidate';
           candidateStart = timestamp;
         }
         break;
 
       case 'candidate':
-        if (metering < AUM_THRESHOLD) {
-          // Dropped out too fast — not an AUM, reset
+        if (metering < threshold) {
           state = 'silent';
           candidateStart = null;
-        } else if (timestamp - candidateStart >= AUM_MIN_DURATION) {
-          // Sustained long enough — confirmed AUM onset
+        } else if (timestamp - candidateStart >= minDuration) {
           state = 'confirmed';
           if (!firstOnsetFired) {
             firstOnsetFired = true;
-            onAumOnset(candidateStart); // mark chanting start time (first AUM only)
+            onAumOnset(candidateStart);
           }
         }
         break;
 
       case 'confirmed':
-        if (metering < AUM_END_THRESHOLD) {
-          // Sound dropping — start watching for end of this AUM
+        if (metering < endThreshold) {
           state = 'ending';
           silenceStart = timestamp;
         }
         break;
 
       case 'ending':
-        if (metering >= AUM_THRESHOLD) {
-          // Sound came back — still the same AUM or a new one starting
+        if (metering >= threshold) {
           state = 'confirmed';
           silenceStart = null;
-        } else if (timestamp - silenceStart >= AUM_END_SILENCE) {
-          // Silence held long enough — this AUM is complete
+        } else if (timestamp - silenceStart >= endSilence) {
           state = 'silent';
           silenceStart = null;
           candidateStart = null;
-          onAumComplete(); // increment count
+          onAumComplete();
         }
         break;
     }

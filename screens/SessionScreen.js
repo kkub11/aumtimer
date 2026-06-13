@@ -5,6 +5,7 @@ import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { createAumDetector } from '../audio/AumDetector';
 import { formatMs } from '../utils/formatTime';
 import { muteAll, restoreAll } from '../utils/volumeControl';
+import { loadAumConfig, loadMuteEnabled } from '../utils/aumConfig';
 
 // Set to true during development to log raw metering values to console
 // Chant AUM and watch the numbers — use them to tune thresholds in
@@ -27,21 +28,31 @@ export default function SessionScreen({ navigation }) {
   const aumDetectorRef = useRef(null);
 
   useEffect(() => {
-    aumDetectorRef.current = createAumDetector({
-      onAumOnset: (timestamp) => {
-        if (chantStartTimeRef.current === null) {
-          chantStartTimeRef.current = timestamp;
-          setStatusText('Chanting detected');
-        }
-      },
-      onAumComplete: () => {
-        aumCountRef.current += 1;
-        setAumCount(aumCountRef.current);
-      },
-    });
+    let cancelled = false;
 
     async function init() {
-      await muteAll();
+      const [aumConfig, muteEnabled] = await Promise.all([
+        loadAumConfig(),
+        loadMuteEnabled(),
+      ]);
+      if (cancelled) return;
+
+      aumDetectorRef.current = createAumDetector({
+        onAumOnset: (timestamp) => {
+          if (chantStartTimeRef.current === null) {
+            chantStartTimeRef.current = timestamp;
+            setStatusText('Chanting detected');
+          }
+        },
+        onAumComplete: () => {
+          aumCountRef.current += 1;
+          setAumCount(aumCountRef.current);
+        },
+      }, aumConfig);
+
+      if (muteEnabled) await muteAll();
+      if (cancelled) { restoreAll(); return; }
+
       try {
         await startRecording(recorder);
       } catch (e) {
@@ -57,6 +68,7 @@ export default function SessionScreen({ navigation }) {
     init();
 
     return () => {
+      cancelled = true;
       clearInterval(intervalRef.current);
       stopRecording();
       restoreAll();

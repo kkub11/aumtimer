@@ -15,6 +15,14 @@ export default function StartScreen({ navigation }) {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.settingsButton}
+        onPress={() => navigation.navigate('Settings')}
+        activeOpacity={0.6}
+      >
+        <Text style={styles.settingsIcon}>⚙</Text>
+      </TouchableOpacity>
+
       <Text style={styles.title}>AUM Timer</Text>
       <Text style={styles.subtitle}>Place your phone nearby and press start</Text>
 
@@ -81,5 +89,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#444460',
     textAlign: 'center',
+  },
+  settingsButton: {
+    position: 'absolute',
+    top: 52,
+    left: 24,
+    padding: 8,
+  },
+  settingsIcon: {
+    fontSize: 22,
+    color: '#444460',
   },
 });
