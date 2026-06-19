@@ -21,7 +21,8 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.FOREGROUND_SERVICE",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
-        "android.permission.ACCESS_NOTIFICATION_POLICY"
+        "android.permission.ACCESS_NOTIFICATION_POLICY",
+        "android.permission.CAMERA"
       ],
       "package": "com.kkub11.AumTimer"
     },
@@ -35,7 +36,14 @@
           "microphonePermission": "Allow AUM Timer to use the microphone for session detection.",
           "enableBackgroundRecording": true
         }
-      ]
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow AUM Timer to record video during sessions."
+        }
+      ],
+      "expo-video"
     ],
     "extra": {
       "eas": {

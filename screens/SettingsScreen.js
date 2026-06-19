@@ -1,13 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, TextInput, Switch, ScrollView,
+  View, Text, Switch, ScrollView,
   TouchableOpacity, StyleSheet, PanResponder, Platform,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { useEventListener } from 'expo';
 import { VolumeManager } from 'react-native-volume-manager';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
 import { loadAumConfig, saveAumConfig, loadMuteEnabled, saveMuteEnabled, DEFAULT_AUM_CONFIG } from '../utils/aumConfig';
+import { loadSessionRecordings, deleteSessionRecording } from '../utils/sessionStore';
+import { formatMs } from '../utils/formatTime';
 
 const GRAPH_HEIGHT = 160;
 const BAR_WIDTH = 3;
@@ -35,17 +40,129 @@ function durationToPx(ms) {
   return (ms / 100) * BAR_PITCH;
 }
 
+// ── RecordingCard ─────────────────────────────────────────────────────────────
+// Each card owns its own VideoView + player so hooks are called unconditionally.
+function RecordingCard({ recording, onDelete }) {
+  const player = useVideoPlayer(recording.videoUri, (p) => {
+    p.pause();
+  });
+
+  const isDraggingRef = useRef(false);
+  const [sliderPos, setSliderPos] = useState(0);
+  const durationSec = (recording.duration ?? 0) / 1000;
+
+  // Sync slider to playback position when not dragging
+  useEventListener(player, 'timeUpdate', ({ currentTime }) => {
+    if (!isDraggingRef.current) {
+      setSliderPos(currentTime);
+    }
+  });
+
+  function onSlidingStart() {
+    isDraggingRef.current = true;
+  }
+
+  function onValueChange(value) {
+    setSliderPos(value);
+    player.currentTime = value;  // seek live — audio plays at new position
+  }
+
+  function onSlidingComplete(value) {
+    player.currentTime = value;
+    isDraggingRef.current = false;
+  }
+
+  function togglePlay() {
+    if (player.playing) { player.pause(); } else { player.play(); }
+  }
+
+  const date = new Date(recording.startTime);
+  const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <View style={recStyles.card}>
+      {/* Metadata row */}
+      <View style={recStyles.metaRow}>
+        <Text style={recStyles.metaDate}>{dateStr} {timeStr}</Text>
+        <Text style={recStyles.metaDuration}>{formatMs(recording.duration ?? 0)}</Text>
+        <TouchableOpacity onPress={onDelete} style={recStyles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={recStyles.deleteText}>×</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Video with AUM overlay */}
+      <TouchableOpacity activeOpacity={0.9} onPress={togglePlay}>
+        <View style={recStyles.videoWrapper}>
+          <VideoView player={player} style={recStyles.video} contentFit="contain" nativeControls={false} />
+          <View style={recStyles.aumOverlay}>
+            <Text style={recStyles.aumOverlayText}>{recording.aumCount}</Text>
+            <Text style={recStyles.aumOverlayLabel}>AUMs</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Scrub slider */}
+      <Slider
+        style={recStyles.slider}
+        minimumValue={0}
+        maximumValue={durationSec || 1}
+        step={0.1}
+        value={sliderPos}
+        onSlidingStart={onSlidingStart}
+        onValueChange={onValueChange}
+        onSlidingComplete={onSlidingComplete}
+        minimumTrackTintColor="#c9a84c"
+        maximumTrackTintColor="#2a2a3e"
+        thumbTintColor="#c9a84c"
+      />
+    </View>
+  );
+}
+
+const recStyles = StyleSheet.create({
+  card: {
+    backgroundColor: '#0a0a14',
+    borderRadius: 8,
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  metaDate: { fontSize: 12, color: '#8888aa', flex: 1 },
+  metaDuration: { fontSize: 12, color: '#444460', marginRight: 12, fontVariant: ['tabular-nums'] },
+  deleteButton: { padding: 2 },
+  deleteText: { fontSize: 20, color: '#444460', lineHeight: 22 },
+  videoWrapper: { position: 'relative' },
+  video: { width: '100%', height: 380 },
+  aumOverlay: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(15,15,26,0.65)',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  aumOverlayText: { fontSize: 28, fontWeight: '100', color: '#c9a84c', fontVariant: ['tabular-nums'] },
+  aumOverlayLabel: { fontSize: 9, color: '#c9a84c', letterSpacing: 2 },
+  slider: { width: '100%', height: 32, paddingHorizontal: 8 },
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function SettingsScreen({ navigation }) {
   const [config, setConfig] = useState(DEFAULT_AUM_CONFIG);
   const [muteEnabled, setMuteEnabled] = useState(true);
   const [volumes, setVolumes] = useState(null);
+  const [recordings, setRecordings] = useState([]);
   const [sampleTick, setSampleTick] = useState(0);
   const [bandX, setBandX] = useState(null);
 
-  const [thresholdText, setThresholdText]       = useState(String(DEFAULT_AUM_CONFIG.aumThreshold));
-  const [minDurText, setMinDurText]             = useState(String(DEFAULT_AUM_CONFIG.aumMinDuration));
-  const [endThresholdText, setEndThresholdText] = useState(String(DEFAULT_AUM_CONFIG.aumEndThreshold));
-  const [endSilenceText, setEndSilenceText]     = useState(String(DEFAULT_AUM_CONFIG.aumEndSilence));
 
   const samplesRef    = useRef([]);
   const configRef     = useRef(config);
@@ -57,14 +174,9 @@ export default function SettingsScreen({ navigation }) {
 
   // ── Load persisted settings ──────────────────────────────────────────────
   useEffect(() => {
-    loadAumConfig().then((c) => {
-      setConfig(c);
-      setThresholdText(String(c.aumThreshold));
-      setMinDurText(String(c.aumMinDuration));
-      setEndThresholdText(String(c.aumEndThreshold));
-      setEndSilenceText(String(c.aumEndSilence));
-    });
+    loadAumConfig().then(setConfig);
     loadMuteEnabled().then(setMuteEnabled);
+    loadSessionRecordings().then(setRecordings);
     if (Platform.OS === 'android') {
       VolumeManager.getVolume().then(setVolumes);
     }
@@ -126,34 +238,18 @@ export default function SettingsScreen({ navigation }) {
     bandXRef.current = initialX;
   }
 
-  // ── Commit helpers ───────────────────────────────────────────────────────
-  function commitThreshold() {
-    const v = Math.round(Math.max(-80, Math.min(-1, parseFloat(thresholdText) || config.aumThreshold)));
-    setConfig((c) => ({ ...c, aumThreshold: v }));
-    setThresholdText(String(v));
-    saveAumConfig({ aumThreshold: v });
-  }
+  // ── Slider change handlers ───────────────────────────────────────────────
+  function handleThresholdChange(v) { setConfig((c) => ({ ...c, aumThreshold: Math.round(v) })); }
+  function handleThresholdComplete(v) { saveAumConfig({ aumThreshold: Math.round(v) }); }
 
-  function commitEndThreshold() {
-    const v = Math.round(Math.max(-80, Math.min(-1, parseFloat(endThresholdText) || config.aumEndThreshold)));
-    setConfig((c) => ({ ...c, aumEndThreshold: v }));
-    setEndThresholdText(String(v));
-    saveAumConfig({ aumEndThreshold: v });
-  }
+  function handleEndThresholdChange(v) { setConfig((c) => ({ ...c, aumEndThreshold: Math.round(v) })); }
+  function handleEndThresholdComplete(v) { saveAumConfig({ aumEndThreshold: Math.round(v) }); }
 
-  function commitMinDur() {
-    const v = Math.max(100, Math.min(10000, parseInt(minDurText, 10) || config.aumMinDuration));
-    setConfig((c) => ({ ...c, aumMinDuration: v }));
-    setMinDurText(String(v));
-    saveAumConfig({ aumMinDuration: v });
-  }
+  function handleMinDurChange(v) { setConfig((c) => ({ ...c, aumMinDuration: Math.round(v / 100) * 100 })); }
+  function handleMinDurComplete(v) { saveAumConfig({ aumMinDuration: Math.round(v / 100) * 100 }); }
 
-  function commitEndSilence() {
-    const v = Math.max(100, Math.min(5000, parseInt(endSilenceText, 10) || config.aumEndSilence));
-    setConfig((c) => ({ ...c, aumEndSilence: v }));
-    setEndSilenceText(String(v));
-    saveAumConfig({ aumEndSilence: v });
-  }
+  function handleEndSilenceChange(v) { setConfig((c) => ({ ...c, aumEndSilence: Math.round(v / 50) * 50 })); }
+  function handleEndSilenceComplete(v) { saveAumConfig({ aumEndSilence: Math.round(v / 50) * 50 }); }
 
   // ── Render ───────────────────────────────────────────────────────────────
   const samples = samplesRef.current;
@@ -264,66 +360,103 @@ export default function SettingsScreen({ navigation }) {
           </View>
         </View>
 
-        {/* Numeric inputs */}
+        {/* Sliders */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>THRESHOLD VALUES</Text>
 
-          <View style={styles.inputRow}>
-            <Text style={[styles.inputLabel, { color: COLOR_ONSET }]}>Onset threshold (dBFS)</Text>
-            <TextInput
-              style={[styles.input, { borderColor: COLOR_ONSET, color: COLOR_ONSET }]}
-              value={thresholdText}
-              onChangeText={setThresholdText}
-              keyboardType="numeric"
-              onBlur={commitThreshold}
-              onSubmitEditing={commitThreshold}
-              selectionColor={COLOR_ONSET}
-              placeholderTextColor="#444460"
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderLabelRow}>
+              <Text style={[styles.sliderLabel, { color: COLOR_ONSET }]}>Onset threshold</Text>
+              <Text style={[styles.sliderValue, { color: COLOR_ONSET }]}>{config.aumThreshold} dBFS</Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={-80}
+              maximumValue={-1}
+              step={1}
+              value={config.aumThreshold}
+              onValueChange={handleThresholdChange}
+              onSlidingComplete={handleThresholdComplete}
+              minimumTrackTintColor={COLOR_ONSET}
+              maximumTrackTintColor="#2a2a3e"
+              thumbTintColor={COLOR_ONSET}
             />
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={[styles.inputLabel, { color: COLOR_DUR }]}>Min duration (ms)</Text>
-            <TextInput
-              style={[styles.input, { borderColor: COLOR_DUR, color: COLOR_DUR }]}
-              value={minDurText}
-              onChangeText={setMinDurText}
-              keyboardType="numeric"
-              onBlur={commitMinDur}
-              onSubmitEditing={commitMinDur}
-              selectionColor={COLOR_DUR}
-              placeholderTextColor="#444460"
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderLabelRow}>
+              <Text style={[styles.sliderLabel, { color: COLOR_DUR }]}>Min duration</Text>
+              <Text style={[styles.sliderValue, { color: COLOR_DUR }]}>{config.aumMinDuration} ms</Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={100}
+              maximumValue={5000}
+              step={100}
+              value={config.aumMinDuration}
+              onValueChange={handleMinDurChange}
+              onSlidingComplete={handleMinDurComplete}
+              minimumTrackTintColor={COLOR_DUR}
+              maximumTrackTintColor="#2a2a3e"
+              thumbTintColor={COLOR_DUR}
             />
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={[styles.inputLabel, { color: COLOR_END }]}>End threshold (dBFS)</Text>
-            <TextInput
-              style={[styles.input, { borderColor: COLOR_END, color: COLOR_END }]}
-              value={endThresholdText}
-              onChangeText={setEndThresholdText}
-              keyboardType="numeric"
-              onBlur={commitEndThreshold}
-              onSubmitEditing={commitEndThreshold}
-              selectionColor={COLOR_END}
-              placeholderTextColor="#444460"
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderLabelRow}>
+              <Text style={[styles.sliderLabel, { color: COLOR_END }]}>End threshold</Text>
+              <Text style={[styles.sliderValue, { color: COLOR_END }]}>{config.aumEndThreshold} dBFS</Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={-80}
+              maximumValue={-1}
+              step={1}
+              value={config.aumEndThreshold}
+              onValueChange={handleEndThresholdChange}
+              onSlidingComplete={handleEndThresholdComplete}
+              minimumTrackTintColor={COLOR_END}
+              maximumTrackTintColor="#2a2a3e"
+              thumbTintColor={COLOR_END}
             />
           </View>
 
-          <View style={styles.inputRow}>
-            <Text style={[styles.inputLabel, { color: COLOR_DUR }]}>End silence (ms)</Text>
-            <TextInput
-              style={[styles.input, { borderColor: COLOR_DUR, color: COLOR_DUR }]}
-              value={endSilenceText}
-              onChangeText={setEndSilenceText}
-              keyboardType="numeric"
-              onBlur={commitEndSilence}
-              onSubmitEditing={commitEndSilence}
-              selectionColor={COLOR_DUR}
-              placeholderTextColor="#444460"
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderLabelRow}>
+              <Text style={[styles.sliderLabel, { color: COLOR_DUR }]}>End silence</Text>
+              <Text style={[styles.sliderValue, { color: COLOR_DUR }]}>{config.aumEndSilence} ms</Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={50}
+              maximumValue={2000}
+              step={50}
+              value={config.aumEndSilence}
+              onValueChange={handleEndSilenceChange}
+              onSlidingComplete={handleEndSilenceComplete}
+              minimumTrackTintColor={COLOR_DUR}
+              maximumTrackTintColor="#2a2a3e"
+              thumbTintColor={COLOR_DUR}
             />
           </View>
         </View>
+
+        {/* Recent recordings */}
+        {recordings.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>RECENT RECORDINGS</Text>
+            {recordings.map((rec) => (
+              <RecordingCard
+                key={rec.startTime}
+                recording={rec}
+                onDelete={async () => {
+                  await deleteSessionRecording(rec.videoUri);
+                  setRecordings((r) => r.filter((x) => x.startTime !== rec.startTime));
+                }}
+              />
+            ))}
+          </View>
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -371,18 +504,9 @@ const styles = StyleSheet.create({
   legendSwatch: { width: 12, height: 12, borderRadius: 2, marginRight: 4 },
   legendText: { fontSize: 11, color: '#666680', flex: 1, marginLeft: 4 },
 
-  inputRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#15152a' },
-  inputLabel: { fontSize: 13, color: '#666680', flex: 1 },
-  input: {
-    width: 80,
-    textAlign: 'right',
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: '#15152a',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: '#2a2a3e',
-  },
+  sliderRow: { marginBottom: 20 },
+  sliderLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  sliderLabel: { fontSize: 13, fontWeight: '300' },
+  sliderValue: { fontSize: 13, fontVariant: ['tabular-nums'] },
+  slider: { width: '100%', height: 32 },
 });

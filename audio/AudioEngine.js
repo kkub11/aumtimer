@@ -1,4 +1,5 @@
-import { AudioModule, setAudioModeAsync } from 'expo-audio';
+import { AudioModule, setAudioModeAsync, requestNotificationPermissionsAsync } from 'expo-audio';
+import { Platform } from 'react-native';
 
 // expo-audio uses a hook-based API. The recorder is created in the component
 // via useAudioRecorder; metering is read via useAudioRecorderState. This module
@@ -12,6 +13,10 @@ export async function startRecording(recorder) {
   const { granted } = await AudioModule.requestRecordingPermissionsAsync();
   if (!granted) {
     throw new Error('Microphone permission not granted');
+  }
+
+  if (Platform.OS === 'android') {
+    await requestNotificationPermissionsAsync();
   }
 
   await setAudioModeAsync({
