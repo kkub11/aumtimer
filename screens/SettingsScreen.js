@@ -10,7 +10,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEventListener } from 'expo';
 import { VolumeManager } from 'react-native-volume-manager';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
-import { loadAumConfig, saveAumConfig, loadMuteEnabled, saveMuteEnabled, DEFAULT_AUM_CONFIG } from '../utils/aumConfig';
+import { loadAumConfig, saveAumConfig, loadMuteEnabled, saveMuteEnabled, loadBeepStartEnabled, saveBeepStartEnabled, DEFAULT_AUM_CONFIG } from '../utils/aumConfig';
 import { loadSessionRecordings, deleteSessionRecording } from '../utils/sessionStore';
 import { formatMs } from '../utils/formatTime';
 
@@ -79,6 +79,12 @@ function RecordingCard({ recording, onDelete }) {
   const date = new Date(recording.startTime);
   const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const began = recording.chantStartTime != null
+    ? formatMs(recording.chantStartTime - recording.startTime)
+    : '—';
+  const ended = recording.lastAumEndTime != null
+    ? formatMs(recording.lastAumEndTime - recording.startTime)
+    : '—';
 
   return (
     <View style={recStyles.card}>
@@ -89,6 +95,11 @@ function RecordingCard({ recording, onDelete }) {
         <TouchableOpacity onPress={onDelete} style={recStyles.deleteButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={recStyles.deleteText}>×</Text>
         </TouchableOpacity>
+      </View>
+      <View style={recStyles.timesRow}>
+        <Text style={recStyles.timeChip}>Began {began}</Text>
+        <Text style={recStyles.timeChip}>Ended {ended}</Text>
+        <Text style={recStyles.timeChip}>Total {formatMs(recording.duration ?? 0)}</Text>
       </View>
 
       {/* Video with AUM overlay */}
@@ -135,6 +146,8 @@ const recStyles = StyleSheet.create({
   },
   metaDate: { fontSize: 12, color: '#8888aa', flex: 1 },
   metaDuration: { fontSize: 12, color: '#444460', marginRight: 12, fontVariant: ['tabular-nums'] },
+  timesRow: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 8, gap: 12 },
+  timeChip: { fontSize: 11, color: '#666680', fontVariant: ['tabular-nums'] },
   deleteButton: { padding: 2 },
   deleteText: { fontSize: 20, color: '#444460', lineHeight: 22 },
   videoWrapper: { position: 'relative' },
@@ -158,6 +171,7 @@ const recStyles = StyleSheet.create({
 export default function SettingsScreen({ navigation }) {
   const [config, setConfig] = useState(DEFAULT_AUM_CONFIG);
   const [muteEnabled, setMuteEnabled] = useState(true);
+  const [beepStartEnabled, setBeepStartEnabled] = useState(false);
   const [volumes, setVolumes] = useState(null);
   const [recordings, setRecordings] = useState([]);
   const [sampleTick, setSampleTick] = useState(0);
@@ -176,6 +190,7 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     loadAumConfig().then(setConfig);
     loadMuteEnabled().then(setMuteEnabled);
+    loadBeepStartEnabled().then(setBeepStartEnabled);
     loadSessionRecordings().then(setRecordings);
     if (Platform.OS === 'android') {
       VolumeManager.getVolume().then(setVolumes);
@@ -271,6 +286,18 @@ export default function SettingsScreen({ navigation }) {
               onValueChange={(v) => { setMuteEnabled(v); saveMuteEnabled(v); }}
               trackColor={{ false: '#2a2a3e', true: 'rgba(201,168,76,0.35)' }}
               thumbColor={muteEnabled ? '#c9a84c' : '#444460'}
+            />
+          </View>
+          <View style={[styles.toggleRow, styles.toggleRowSpaced]}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>Start session on beep</Text>
+              <Text style={styles.toggleHint}>Listen for a short, loud timer beep on the start screen</Text>
+            </View>
+            <Switch
+              value={beepStartEnabled}
+              onValueChange={(v) => { setBeepStartEnabled(v); saveBeepStartEnabled(v); }}
+              trackColor={{ false: '#2a2a3e', true: 'rgba(201,168,76,0.35)' }}
+              thumbColor={beepStartEnabled ? '#c9a84c' : '#444460'}
             />
           </View>
         </View>
@@ -473,7 +500,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 10, color: '#444460', letterSpacing: 4, marginBottom: 14 },
 
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4 },
+  toggleRowSpaced: { marginTop: 16 },
+  toggleCopy: { flex: 1, paddingRight: 12 },
   toggleLabel: { fontSize: 15, color: '#8888aa', fontWeight: '300' },
+  toggleHint: { fontSize: 12, color: '#444460', marginTop: 4, lineHeight: 16 },
 
   volumeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: '#15152a' },
   volLabel: { fontSize: 13, color: '#666680' },

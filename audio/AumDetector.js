@@ -55,10 +55,11 @@ export function createAumDetector({ onAumOnset, onAumComplete }, config = {}) {
           state = 'confirmed';
           silenceStart = null;
         } else if (timestamp - silenceStart >= endSilence) {
+          const endedAt = silenceStart; // moment the chant dropped below end threshold
           state = 'silent';
           silenceStart = null;
           candidateStart = null;
-          onAumComplete();
+          onAumComplete(endedAt);
         }
         break;
     }

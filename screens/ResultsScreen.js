@@ -2,15 +2,16 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { formatMs } from '../utils/formatTime';
 
-export default function ResultsScreen({ navigation, route }) {
-  const { startTime, chantStartTime, aumCount, endTime } = route.params;
+function elapsedOrDash(startTime, eventTime) {
+  if (startTime == null || eventTime == null) return '—';
+  return formatMs(eventTime - startTime);
+}
 
-  const preChantDuration = chantStartTime
-    ? chantStartTime - startTime
-    : endTime - startTime;
+export default function ResultsScreen({ navigation, route }) {
+  const { startTime, chantStartTime, lastAumEndTime, aumCount, endTime } = route.params;
 
   const totalDuration = endTime - startTime;
-  const chantingDetected = chantStartTime !== null;
+  const chantingDetected = chantStartTime != null;
 
   return (
     <View style={styles.container}>
@@ -18,19 +19,24 @@ export default function ResultsScreen({ navigation, route }) {
 
       <View style={styles.card}>
         <StatRow
-          label="Before chanting"
-          value={chantingDetected ? formatMs(preChantDuration) : '—'}
+          label="AUMs began"
+          value={elapsedOrDash(startTime, chantStartTime)}
         />
         <View style={styles.rowDivider} />
         <StatRow
-          label="AUMs counted"
-          value={aumCount.toString()}
-          valueStyle={styles.aumValue}
+          label="AUMs ended"
+          value={elapsedOrDash(startTime, lastAumEndTime)}
         />
         <View style={styles.rowDivider} />
         <StatRow
           label="Total session"
           value={formatMs(totalDuration)}
+        />
+        <View style={styles.rowDivider} />
+        <StatRow
+          label="AUMs counted"
+          value={(aumCount ?? 0).toString()}
+          valueStyle={styles.aumValue}
         />
       </View>
 

@@ -9,6 +9,7 @@ export const DEFAULT_AUM_CONFIG = {
 
 const CONFIG_KEY = 'aum_config';
 const MUTE_KEY = 'mute_enabled';
+const BEEP_START_KEY = 'beep_start_enabled';
 
 export async function loadAumConfig() {
   try {
@@ -43,5 +44,22 @@ export async function saveMuteEnabled(enabled) {
     await AsyncStorage.setItem(MUTE_KEY, String(enabled));
   } catch (e) {
     console.warn('[aumConfig] saveMuteEnabled failed:', e);
+  }
+}
+
+export async function loadBeepStartEnabled() {
+  try {
+    const val = await AsyncStorage.getItem(BEEP_START_KEY);
+    return val === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function saveBeepStartEnabled(enabled) {
+  try {
+    await AsyncStorage.setItem(BEEP_START_KEY, String(enabled));
+  } catch (e) {
+    console.warn('[aumConfig] saveBeepStartEnabled failed:', e);
   }
 }

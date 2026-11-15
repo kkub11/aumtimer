@@ -24,6 +24,7 @@ export default function SessionScreen({ navigation }) {
 
   const startTimeRef = useRef(Date.now());
   const chantStartTimeRef = useRef(null);
+  const lastAumEndTimeRef = useRef(null);
   const aumCountRef = useRef(0);
   const intervalRef = useRef(null);
   const sessionDoneRef = useRef(false);
@@ -57,9 +58,10 @@ export default function SessionScreen({ navigation }) {
             setStatusText('Chanting detected');
           }
         },
-        onAumComplete: () => {
+        onAumComplete: (endedAt) => {
           aumCountRef.current += 1;
           setAumCount(aumCountRef.current);
+          lastAumEndTimeRef.current = endedAt;
         },
       }, aumConfig);
 
@@ -137,6 +139,7 @@ export default function SessionScreen({ navigation }) {
           aumCount,
           duration,
           chantStartTime: chantStartTimeRef.current,
+          lastAumEndTime: lastAumEndTimeRef.current,
         });
       } catch (e) {
         console.warn('[SessionScreen] video save failed:', e);
@@ -146,6 +149,7 @@ export default function SessionScreen({ navigation }) {
     navigation.replace('Results', {
       startTime,
       chantStartTime: chantStartTimeRef.current,
+      lastAumEndTime: lastAumEndTimeRef.current,
       aumCount,
       endTime: endTimestamp,
     });

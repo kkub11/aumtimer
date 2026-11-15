@@ -1,8 +1,33 @@
-import React, { useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 import { VolumeManager } from 'react-native-volume-manager';
+import { startRecording, stopRecording } from '../audio/AudioEngine';
+import { createBeepDetector } from '../audio/BeepDetector';
+import { loadBeepStartEnabled } from '../utils/aumConfig';
 
 export default function StartScreen({ navigation }) {
+  const [beepStartEnabled, setBeepStartEnabled] = useState(false);
+  const [listenStatus, setListenStatus] = useState('idle'); // idle | listening | error
+
+  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
+  const recorderState = useAudioRecorderState(recorder, 100);
+
+  const detectorRef = useRef(null);
+  const startingRef = useRef(false);
+
+  const beginSession = useCallback(async () => {
+    if (startingRef.current) return;
+    startingRef.current = true;
+    try {
+      await stopRecording();
+    } catch {
+      // already stopped
+    }
+    navigation.navigate('Session');
+  }, [navigation]);
+
   useEffect(() => {
     async function ensureDndAccess() {
       const granted = await VolumeManager.checkDndAccess();
@@ -12,6 +37,57 @@ export default function StartScreen({ navigation }) {
     }
     ensureDndAccess();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      startingRef.current = false;
+
+      detectorRef.current = createBeepDetector({
+        onBeepDetected: () => {
+          if (!cancelled) beginSession();
+        },
+      });
+
+      async function maybeListen() {
+        const enabled = await loadBeepStartEnabled();
+        if (cancelled) return;
+        setBeepStartEnabled(enabled);
+        if (!enabled) {
+          setListenStatus('idle');
+          return;
+        }
+        try {
+          await startRecording(recorder);
+          if (cancelled) {
+            await stopRecording();
+            return;
+          }
+          setListenStatus('listening');
+        } catch (e) {
+          console.warn('[StartScreen] beep-start mic failed:', e);
+          if (!cancelled) setListenStatus('error');
+        }
+      }
+
+      maybeListen();
+
+      return () => {
+        cancelled = true;
+        stopRecording();
+        detectorRef.current?.reset();
+        detectorRef.current = null;
+      };
+    }, [recorder, beginSession])
+  );
+
+  useEffect(() => {
+    if (listenStatus !== 'listening' || !recorderState.isRecording || startingRef.current) return;
+    detectorRef.current?.feed({
+      timestamp: Date.now(),
+      metering: recorderState.metering ?? -160,
+    });
+  }, [recorderState, listenStatus]);
 
   return (
     <View style={styles.container}>
@@ -24,19 +100,29 @@ export default function StartScreen({ navigation }) {
       </TouchableOpacity>
 
       <Text style={styles.title}>AUM Timer</Text>
-      <Text style={styles.subtitle}>Place your phone nearby and press start</Text>
+      <Text style={styles.subtitle}>
+        {beepStartEnabled
+          ? 'Place your phone nearby and press start, or play a short beep'
+          : 'Place your phone nearby and press start'}
+      </Text>
 
       <TouchableOpacity
         style={styles.button}
-        onPress={() => navigation.navigate('Session')}
+        onPress={beginSession}
         activeOpacity={0.75}
       >
         <Text style={styles.buttonText}>START</Text>
       </TouchableOpacity>
 
       <Text style={styles.hint}>
-        Session ends when it hears a beep
+        Session ends when you press STOP
       </Text>
+      {beepStartEnabled && listenStatus === 'listening' && (
+        <Text style={styles.listenHint}>Listening for start beep…</Text>
+      )}
+      {beepStartEnabled && listenStatus === 'error' && (
+        <Text style={styles.listenError}>Microphone permission needed to start on beep</Text>
+      )}
     </View>
   );
 }
@@ -88,6 +174,18 @@ const styles = StyleSheet.create({
     marginTop: 48,
     fontSize: 12,
     color: '#444460',
+    textAlign: 'center',
+  },
+  listenHint: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#c9a84c',
+    textAlign: 'center',
+  },
+  listenError: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#a07060',
     textAlign: 'center',
   },
   settingsButton: {
