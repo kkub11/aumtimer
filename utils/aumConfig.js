@@ -16,6 +16,7 @@ export { DEFAULT_HEAD_TILT_CONFIG } from './HeadTiltDetector';
 const CONFIG_KEY = 'aum_config';
 const MUTE_KEY = 'mute_enabled';
 const BEEP_START_KEY = 'beep_start_enabled';
+const DIAGNOSTICS_KEY = 'diagnostics_enabled';
 
 export async function loadAumConfig() {
   try {
@@ -67,5 +68,22 @@ export async function saveBeepStartEnabled(enabled) {
     await AsyncStorage.setItem(BEEP_START_KEY, String(enabled));
   } catch (e) {
     console.warn('[aumConfig] saveBeepStartEnabled failed:', e);
+  }
+}
+
+export async function loadDiagnosticsEnabled() {
+  try {
+    const val = await AsyncStorage.getItem(DIAGNOSTICS_KEY);
+    return val === null ? true : val === 'true';
+  } catch {
+    return true;
+  }
+}
+
+export async function saveDiagnosticsEnabled(enabled) {
+  try {
+    await AsyncStorage.setItem(DIAGNOSTICS_KEY, String(enabled));
+  } catch (e) {
+    console.warn('[aumConfig] saveDiagnosticsEnabled failed:', e);
   }
 }

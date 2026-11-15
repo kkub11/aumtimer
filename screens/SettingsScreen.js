@@ -10,7 +10,7 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEventListener } from 'expo';
 import { VolumeManager } from 'react-native-volume-manager';
 import { startRecording, stopRecording } from '../audio/AudioEngine';
-import { loadAumConfig, saveAumConfig, loadMuteEnabled, saveMuteEnabled, loadBeepStartEnabled, saveBeepStartEnabled, DEFAULT_AUM_CONFIG } from '../utils/aumConfig';
+import { loadAumConfig, saveAumConfig, loadMuteEnabled, saveMuteEnabled, loadBeepStartEnabled, saveBeepStartEnabled, loadDiagnosticsEnabled, saveDiagnosticsEnabled, DEFAULT_AUM_CONFIG } from '../utils/aumConfig';
 import { loadSessionRecordings, deleteSessionRecording } from '../utils/sessionStore';
 import { formatMs } from '../utils/formatTime';
 
@@ -176,6 +176,7 @@ export default function SettingsScreen({ navigation }) {
   const [config, setConfig] = useState(DEFAULT_AUM_CONFIG);
   const [muteEnabled, setMuteEnabled] = useState(true);
   const [beepStartEnabled, setBeepStartEnabled] = useState(false);
+  const [diagnosticsEnabled, setDiagnosticsEnabled] = useState(true);
   const [volumes, setVolumes] = useState(null);
   const [recordings, setRecordings] = useState([]);
   const [sampleTick, setSampleTick] = useState(0);
@@ -195,6 +196,7 @@ export default function SettingsScreen({ navigation }) {
     loadAumConfig().then(setConfig);
     loadMuteEnabled().then(setMuteEnabled);
     loadBeepStartEnabled().then(setBeepStartEnabled);
+    loadDiagnosticsEnabled().then(setDiagnosticsEnabled);
     loadSessionRecordings().then(setRecordings);
     if (Platform.OS === 'android') {
       VolumeManager.getVolume().then(setVolumes);
@@ -217,8 +219,14 @@ export default function SettingsScreen({ navigation }) {
   const recState = useAudioRecorderState(recorder, 100);
 
   useEffect(() => {
-    startRecording(recorder).catch(console.error);
-    return () => { stopRecording(); };
+    let cancelled = false;
+    startRecording(recorder).catch((e) => {
+      if (!cancelled) console.warn('[SettingsScreen] mic start failed:', e);
+    });
+    return () => {
+      cancelled = true;
+      stopRecording(recorder);
+    };
   }, []);
 
   useEffect(() => {
@@ -305,6 +313,18 @@ export default function SettingsScreen({ navigation }) {
               onValueChange={(v) => { setBeepStartEnabled(v); saveBeepStartEnabled(v); }}
               trackColor={{ false: '#2a2a3e', true: 'rgba(201,168,76,0.35)' }}
               thumbColor={beepStartEnabled ? '#c9a84c' : '#444460'}
+            />
+          </View>
+          <View style={[styles.toggleRow, styles.toggleRowSpaced]}>
+            <View style={styles.toggleCopy}>
+              <Text style={styles.toggleLabel}>Show diagnostics</Text>
+              <Text style={styles.toggleHint}>Mic, camera, and listener status on the start and session screens</Text>
+            </View>
+            <Switch
+              value={diagnosticsEnabled}
+              onValueChange={(v) => { setDiagnosticsEnabled(v); saveDiagnosticsEnabled(v); }}
+              trackColor={{ false: '#2a2a3e', true: 'rgba(201,168,76,0.35)' }}
+              thumbColor={diagnosticsEnabled ? '#c9a84c' : '#444460'}
             />
           </View>
         </View>

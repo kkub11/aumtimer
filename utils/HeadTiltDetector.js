@@ -42,6 +42,8 @@ export function createHeadTiltDetector({ onTiltBack, onTiltForward, onReturnToVe
   let tiltBackTime = null;
   let tiltForwardTime = null;
   let completeTime = null;
+  let lastSmoothed = null;
+  let lastHasFace = false;
 
   function maybeWatch() {
     if (completeTime) return;
@@ -68,12 +70,15 @@ export function createHeadTiltDetector({ onTiltBack, onTiltForward, onReturnToVe
       if (lastFaceAt && timestamp - lastFaceAt <= cfg.faceLostToleranceMs) {
         return; // brief dropout — keep state and last smoothed pitch
       }
+      lastHasFace = false;
       verticalHoldStart = null;
       return;
     }
 
     lastFaceAt = timestamp;
+    lastHasFace = true;
     const smoothed = smooth(pitch * cfg.pitchSign);
+    lastSmoothed = smoothed;
 
     if (baseline == null) {
       state = 'calibrating';
@@ -136,6 +141,21 @@ export function createHeadTiltDetector({ onTiltBack, onTiltForward, onReturnToVe
     };
   }
 
+  function getStatus() {
+    const rel = (baseline != null && lastSmoothed != null)
+      ? lastSmoothed - baseline
+      : null;
+    return {
+      state,
+      armed,
+      hasFace: lastHasFace,
+      baseline,
+      smoothedPitch: lastSmoothed,
+      relativePitch: rel,
+      completeTime,
+    };
+  }
+
   function reset() {
     baseline = null;
     calibrationSamples = [];
@@ -148,7 +168,9 @@ export function createHeadTiltDetector({ onTiltBack, onTiltForward, onReturnToVe
     tiltBackTime = null;
     tiltForwardTime = null;
     completeTime = null;
+    lastSmoothed = null;
+    lastHasFace = false;
   }
 
-  return { feed, notifyFirstAum, getTimes, reset };
+  return { feed, notifyFirstAum, getTimes, getStatus, reset };
 }

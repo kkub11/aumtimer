@@ -1,38 +1,49 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, AppState } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAudioRecorder, useAudioRecorderState, RecordingPresets } from 'expo-audio';
 import { VolumeManager } from 'react-native-volume-manager';
-import { startRecording, stopRecording } from '../audio/AudioEngine';
+import { startRecording, stopRecording, getMicPermissionGranted, micPermissionError } from '../audio/AudioEngine';
 import { createBeepDetector } from '../audio/BeepDetector';
-import { loadBeepStartEnabled } from '../utils/aumConfig';
+import { loadBeepStartEnabled, loadDiagnosticsEnabled } from '../utils/aumConfig';
 
 export default function StartScreen({ navigation }) {
   const [beepStartEnabled, setBeepStartEnabled] = useState(false);
-  const [listenStatus, setListenStatus] = useState('idle'); // idle | listening | error
+  const [listenStatus, setListenStatus] = useState('idle'); // idle | starting | listening | error
+  const [listenError, setListenError] = useState(null);
+  const [diagnostics, setDiagnostics] = useState(true);
+  const [micGranted, setMicGranted] = useState(null);
 
   const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, isMeteringEnabled: true });
   const recorderState = useAudioRecorderState(recorder, 100);
 
   const detectorRef = useRef(null);
   const startingRef = useRef(false);
+  const focusedRef = useRef(false);
+  const recorderRef = useRef(recorder);
+  recorderRef.current = recorder;
 
   const beginSession = useCallback(async () => {
     if (startingRef.current) return;
     startingRef.current = true;
-    try {
-      await stopRecording();
-    } catch {
-      // already stopped
-    }
+    setListenStatus('idle');
+    // Never block navigation if stop hangs; Session start is queued after this stop.
+    await Promise.race([
+      stopRecording(recorderRef.current),
+      new Promise((resolve) => setTimeout(resolve, 800)),
+    ]);
     navigation.navigate('Session');
   }, [navigation]);
 
   useEffect(() => {
     async function ensureDndAccess() {
-      const granted = await VolumeManager.checkDndAccess();
-      if (!granted) {
-        await VolumeManager.requestDndAccess();
+      try {
+        const granted = await VolumeManager.checkDndAccess();
+        if (!granted) {
+          await VolumeManager.requestDndAccess();
+        }
+      } catch (e) {
+        console.warn('[StartScreen] DND access check failed:', e);
       }
     }
     ensureDndAccess();
@@ -42,6 +53,7 @@ export default function StartScreen({ navigation }) {
     useCallback(() => {
       let cancelled = false;
       startingRef.current = false;
+      focusedRef.current = true;
 
       detectorRef.current = createBeepDetector({
         onBeepDetected: () => {
@@ -50,23 +62,44 @@ export default function StartScreen({ navigation }) {
       });
 
       async function maybeListen() {
-        const enabled = await loadBeepStartEnabled();
+        const [enabled, showDiag] = await Promise.all([
+          loadBeepStartEnabled(),
+          loadDiagnosticsEnabled(),
+        ]);
         if (cancelled) return;
         setBeepStartEnabled(enabled);
+        setDiagnostics(showDiag);
+
+        const granted = await getMicPermissionGranted();
+        if (!cancelled) setMicGranted(granted);
+
         if (!enabled) {
           setListenStatus('idle');
+          setListenError(null);
           return;
         }
+
+        setListenStatus('starting');
+        setListenError(null);
         try {
-          await startRecording(recorder);
+          await startRecording(recorderRef.current);
           if (cancelled) {
-            await stopRecording();
+            await stopRecording(recorderRef.current);
             return;
           }
           setListenStatus('listening');
+          setMicGranted(true);
         } catch (e) {
           console.warn('[StartScreen] beep-start mic failed:', e);
-          if (!cancelled) setListenStatus('error');
+          if (cancelled) return;
+          const grantedNow = await getMicPermissionGranted();
+          setMicGranted(grantedNow);
+          setListenStatus('error');
+          setListenError(
+            micPermissionError(e) || !grantedNow
+              ? 'Microphone permission needed to start on beep'
+              : 'Could not start the microphone. Try opening Settings and returning, or press START.'
+          );
         }
       }
 
@@ -74,12 +107,30 @@ export default function StartScreen({ navigation }) {
 
       return () => {
         cancelled = true;
-        stopRecording();
+        focusedRef.current = false;
+        setListenStatus('idle');
+        stopRecording(recorderRef.current);
         detectorRef.current?.reset();
         detectorRef.current = null;
       };
-    }, [recorder, beginSession])
+    }, [beginSession])
   );
+
+  // Restart listening when returning from a system dialog (DND / permission)
+  // that may have blurred the app without an unmount.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && focusedRef.current && beepStartEnabled && listenStatus !== 'starting') {
+        // useFocusEffect will usually already have run; if the mic died, retry.
+        if (listenStatus === 'listening' && !recorderState.isRecording) {
+          startRecording(recorderRef.current)
+            .then(() => setListenStatus('listening'))
+            .catch(() => {});
+        }
+      }
+    });
+    return () => sub.remove();
+  }, [beepStartEnabled, listenStatus, recorderState.isRecording]);
 
   useEffect(() => {
     if (listenStatus !== 'listening' || !recorderState.isRecording || startingRef.current) return;
@@ -88,6 +139,21 @@ export default function StartScreen({ navigation }) {
       metering: recorderState.metering ?? -160,
     });
   }, [recorderState, listenStatus]);
+
+  const listenLabel = (() => {
+    if (!beepStartEnabled) return null;
+    if (listenStatus === 'starting') return 'Starting microphone…';
+    if (listenStatus === 'listening' && recorderState.isRecording) return 'Listening for start beep…';
+    if (listenStatus === 'listening' && !recorderState.isRecording) return 'Waiting for microphone…';
+    if (listenStatus === 'error') return listenError;
+    return null;
+  })();
+
+  const diagLine = diagnostics
+    ? `beep ${beepStartEnabled ? 'on' : 'off'} · listen ${listenStatus}`
+      + ` · mic ${micGranted == null ? '…' : micGranted ? 'granted' : 'denied'}`
+      + ` · rec ${recorderState.isRecording ? 'on' : 'off'}`
+    : null;
 
   return (
     <View style={styles.container}>
@@ -117,12 +183,12 @@ export default function StartScreen({ navigation }) {
       <Text style={styles.hint}>
         Session ends when you press STOP
       </Text>
-      {beepStartEnabled && listenStatus === 'listening' && (
-        <Text style={styles.listenHint}>Listening for start beep…</Text>
+      {listenLabel && (
+        <Text style={listenStatus === 'error' ? styles.listenError : styles.listenHint}>
+          {listenLabel}
+        </Text>
       )}
-      {beepStartEnabled && listenStatus === 'error' && (
-        <Text style={styles.listenError}>Microphone permission needed to start on beep</Text>
-      )}
+      {diagLine && <Text style={styles.diag}>{diagLine}</Text>}
     </View>
   );
 }
@@ -186,6 +252,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 13,
     color: '#a07060',
+    textAlign: 'center',
+  },
+  diag: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    fontSize: 10,
+    color: '#555570',
     textAlign: 'center',
   },
   settingsButton: {
