@@ -2,7 +2,7 @@
   "expo": {
     "name": "AumTimer",
     "slug": "AumTimer",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -27,7 +27,8 @@
         "android.permission.ACCESS_NOTIFICATION_POLICY",
         "android.permission.CAMERA"
       ],
-      "package": "com.kkub11.AumTimer"
+      "package": "com.kkub11.AumTimer",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
