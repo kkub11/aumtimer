@@ -85,6 +85,9 @@ function RecordingCard({ recording, onDelete }) {
   const ended = recording.lastAumEndTime != null
     ? formatMs(recording.lastAumEndTime - recording.startTime)
     : '—';
+  const tilt = recording.headTiltCompleteTime != null
+    ? formatMs(recording.headTiltCompleteTime - recording.startTime)
+    : '—';
 
   return (
     <View style={recStyles.card}>
@@ -99,6 +102,7 @@ function RecordingCard({ recording, onDelete }) {
       <View style={recStyles.timesRow}>
         <Text style={recStyles.timeChip}>Began {began}</Text>
         <Text style={recStyles.timeChip}>Ended {ended}</Text>
+        <Text style={recStyles.timeChip}>Tilt {tilt}</Text>
         <Text style={recStyles.timeChip}>Total {formatMs(recording.duration ?? 0)}</Text>
       </View>
 
@@ -146,7 +150,7 @@ const recStyles = StyleSheet.create({
   },
   metaDate: { fontSize: 12, color: '#8888aa', flex: 1 },
   metaDuration: { fontSize: 12, color: '#444460', marginRight: 12, fontVariant: ['tabular-nums'] },
-  timesRow: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 8, gap: 12 },
+  timesRow: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 12, paddingBottom: 8, gap: 12 },
   timeChip: { fontSize: 11, color: '#666680', fontVariant: ['tabular-nums'] },
   deleteButton: { padding: 2 },
   deleteText: { fontSize: 20, color: '#444460', lineHeight: 22 },
@@ -265,6 +269,9 @@ export default function SettingsScreen({ navigation }) {
 
   function handleEndSilenceChange(v) { setConfig((c) => ({ ...c, aumEndSilence: Math.round(v / 50) * 50 })); }
   function handleEndSilenceComplete(v) { saveAumConfig({ aumEndSilence: Math.round(v / 50) * 50 }); }
+
+  function handleTiltSensitivityChange(v) { setConfig((c) => ({ ...c, headTiltSensitivity: Math.round(v * 10) / 10 })); }
+  function handleTiltSensitivityComplete(v) { saveAumConfig({ headTiltSensitivity: Math.round(v * 10) / 10 }); }
 
   // ── Render ───────────────────────────────────────────────────────────────
   const samples = samplesRef.current;
@@ -464,6 +471,34 @@ export default function SettingsScreen({ navigation }) {
               minimumTrackTintColor={COLOR_DUR}
               maximumTrackTintColor="#2a2a3e"
               thumbTintColor={COLOR_DUR}
+            />
+          </View>
+        </View>
+
+        {/* Head tilt sensitivity */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>HEAD TILT DETECTION</Text>
+          <Text style={styles.graphHint}>
+            After chanting, detects head back, then forward, then return to vertical
+          </Text>
+          <View style={styles.sliderRow}>
+            <View style={styles.sliderLabelRow}>
+              <Text style={[styles.sliderLabel, { color: '#c9a84c' }]}>Sensitivity</Text>
+              <Text style={[styles.sliderValue, { color: '#c9a84c' }]}>
+                {(config.headTiltSensitivity ?? 1).toFixed(1)}×
+              </Text>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={0.6}
+              maximumValue={1.6}
+              step={0.1}
+              value={config.headTiltSensitivity ?? 1}
+              onValueChange={handleTiltSensitivityChange}
+              onSlidingComplete={handleTiltSensitivityComplete}
+              minimumTrackTintColor="#c9a84c"
+              maximumTrackTintColor="#2a2a3e"
+              thumbTintColor="#c9a84c"
             />
           </View>
         </View>

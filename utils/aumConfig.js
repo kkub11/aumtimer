@@ -5,7 +5,13 @@ export const DEFAULT_AUM_CONFIG = {
   aumMinDuration: 1500,
   aumEndThreshold: -45,
   aumEndSilence: 300,
+  headTiltSensitivity: 1,
 };
+
+// Head-tilt detector defaults (degrees / ms). Sensitivity is the one
+// Settings slider; the rest stay as code constants. See HeadTiltDetector.js.
+export { DEFAULT_HEAD_TILT_CONFIG } from './HeadTiltDetector';
+
 
 const CONFIG_KEY = 'aum_config';
 const MUTE_KEY = 'mute_enabled';

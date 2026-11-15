@@ -8,7 +8,7 @@ function elapsedOrDash(startTime, eventTime) {
 }
 
 export default function ResultsScreen({ navigation, route }) {
-  const { startTime, chantStartTime, lastAumEndTime, aumCount, endTime } = route.params;
+  const { startTime, chantStartTime, lastAumEndTime, headTiltCompleteTime, aumCount, endTime } = route.params;
 
   const totalDuration = endTime - startTime;
   const chantingDetected = chantStartTime != null;
@@ -26,6 +26,11 @@ export default function ResultsScreen({ navigation, route }) {
         <StatRow
           label="AUMs ended"
           value={elapsedOrDash(startTime, lastAumEndTime)}
+        />
+        <View style={styles.rowDivider} />
+        <StatRow
+          label="Head tilt complete"
+          value={elapsedOrDash(startTime, headTiltCompleteTime)}
         />
         <View style={styles.rowDivider} />
         <StatRow
